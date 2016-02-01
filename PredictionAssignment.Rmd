@@ -1,0 +1,133 @@
+---
+title: "PredictionAssignment"
+author: "Akila Seneviratne"
+date: "February 1, 2016"
+output: html_document
+---
+
+#Synopsis
+
+##Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+##Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+
+#Download and Read the Data
+
+This section loads the requiered libraries to R and then downloads the training and test data sets if they are not already in a subdirectory called data. Fianlly the training and test data sets are read into R.
+
+```{r, warning=FALSE}
+#load requiered R libraries
+library(caret)
+
+#Download data
+if(!file.exists("Data")) {
+  dir.create("Data")
+}
+if(!file.exists("./Data/pml-training.csv")) {
+  trainUrl<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+  download.file(trainUrl, destfile = "./Data/pml-training.csv")
+}
+if(!file.exists("./Data/pml-testing.csv")) {
+  testUrl<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+  download.file(testUrl, destfile = "./Data/pml-testing.csv")
+}
+
+#Read data
+training<-read.csv("./Data/pml-training.csv")
+validate<-read.csv("./Data/pml-testing.csv")
+```
+
+#Data Preprocessing
+
+Many of the features have "NA" entries. These features were first removed from the training data set.
+
+```{r}
+training<-training[,(colSums(is.na(training))==0)]
+```
+
+Then the features such as X, user_name, raw_timestamp_part_1 etc which have no relationship with the activity of lifting a dumbell was also removed from the training set.
+
+```{r}
+#Remove unrelated features from the training set
+Index <-  which(names(training) %in% c('X', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window','num_window'))
+
+training <- training[, -Index]
+```
+
+Finally the features which have zero variance was also removed since they will not contribute to the model.
+
+```{r}
+trainNzv <- nearZeroVar(training, saveMetrics=TRUE)
+training <- training[,trainNzv$nzv==FALSE]
+```
+
+# Data Partitioning
+
+Training set was partitioned as training and testing data.
+
+```{r}
+inTrain <- createDataPartition(y=training$classe, p=0.6, list=FALSE)
+train <- training[inTrain,]
+test <- training[-inTrain,]
+```
+
+#Model Building
+
+Three different models were developed with decision trees, generalized boosted regression and random forests.
+
+```{r, cache=TRUE, warning=FALSE, message=FALSE}
+#Model based on decision trees
+Model_rpart<-train(classe~.,data=train, method="rpart")
+Model_rpart
+
+#Model based on generalized boosted regression
+control<-trainControl(number=5)
+Model_gbm<-train(classe~.,data=train, method="gbm", trControl=control)
+Model_gbm
+
+#Model based on random forests
+control<-trainControl(number=5)
+Model_rf<-train(classe~.,data=train, method="rf", trControl=control)
+Model_rf
+```
+
+#Model Testing
+
+The three models were tested using the test data set and by compearing the accuracy of the estimates.
+
+```{r}
+#Test the decision tree model
+pre_rpart<-predict(Model_rpart,test)
+confusionMatrix(pre_rpart, test$classe)
+
+#Test the generalized boosted regression model
+pre_gbm<-predict(Model_gbm,test)
+confusionMatrix(pre_gbm, test$classe)
+
+#Test the random forests model
+pre_rf<-predict(Model_rf,test)
+confusionMatrix(pre_rf, test$classe)
+```
+The decision tree model performed worst of all three models with an accuracy of 0.5. The best model is the random forest model with an accuracy of 0.99 
+
+#Model Validation
+
+Following is the formula to validate the model and to prepare the requiered files to submit as answers for this project
+```{r}
+validateing<-predict(Model_rf, validate)
+validateing
+```
+
+When these results were entered in the Course Project Prediction Quiz the answers were 100% match. Therefore the random forest model is the best model for this data set.
